@@ -1,0 +1,82 @@
+---
+- name: GitOps Homelab Deployment
+  hosts: homelab
+  become: true
+  gather_facts: false
+  vars:
+    ansible_os_family: "Debian"
+  
+  roles:
+    - tailscale
+    - ufw
+    - k3s
+
+  tasks:
+    - name: Enable unattended-upgrades for security patches
+      ansible.builtin.debconf:
+        name: unattended-upgrades
+        question: unattended-upgrades/enable_auto_updates
+        vtype: boolean
+        value: "true"
+      when: ansible_os_family == "Debian"
+
+    - name: Ensure baseline dependencies are installed
+      ansible.builtin.apt:
+        name: 
+          - python3-requests
+          - ufw
+          - fail2ban
+          - unattended-upgrades
+          - bzip2
+        state: present
+        update_cache: true
+      when: ansible_os_family == "Debian"
+
+    - name: Ensure fail2ban is running and enabled
+      ansible.builtin.systemd:
+        name: fail2ban
+        state: started
+        enabled: yes
+      when: ansible_os_family == "Debian"
+
+    - name: Disable systemd-resolved to free up port 53 for AdGuardHome
+      ansible.builtin.systemd:
+        name: systemd-resolved
+        state: stopped
+        enabled: no
+      failed_when: false
+      when: ansible_os_family == "Debian"
+
+    - name: Create static resolv.conf pointing to external DNS
+      ansible.builtin.copy:
+        dest: /etc/resolv.conf
+        content: |
+          nameserver 1.1.1.1
+          nameserver 8.8.8.8
+        mode: '0644'
+        force: yes
+        follow: no
+      when: ansible_os_family == "Debian"
+
+    - name: Get current Tailscale IP address
+      ansible.builtin.command: tailscale ip -4
+      register: tailscale_ip_result
+      changed_when: false
+      failed_when: tailscale_ip_result.rc != 0
+      ignore_errors: true
+
+    - name: Automatically update Cloudflare DNS to point to this node
+      community.general.cloudflare_dns:
+        zone: "{{ cloudflare_zone | default('example.com') }}"
+        record: "{{ cloudflare_record | default('*.example.com') }}"
+        type: A
+        value: "{{ tailscale_ip_result.stdout }}"
+        api_token: "{{ cloudflare_api_token | default('') }}"
+        proxied: false
+        state: present
+      when: 
+        - tailscale_ip_result is defined
+        - tailscale_ip_result.rc == 0
+        - cloudflare_api_token is defined
+        - cloudflare_api_token != ''
+        - cloudflare_api_token != 'CHANGEME_CLOUDFLARE_API_TOKEN'

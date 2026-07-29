@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: oneill-art-db
+  name: oneill-art-db
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oneill-art-db
+  template:
+    metadata:
+      labels:
+        app: oneill-art-db
+    spec:
+      containers:
+      - env:
+        - name: MYSQL_ROOT_PASSWORD
+          value: REDACTED
+        - name: MYSQL_DATABASE
+          value: wordpress_db
+        - name: MYSQL_USER
+          value: wp_user
+        - name: MYSQL_PASSWORD
+          value: REDACTED
+        image: mariadb:latest
+        name: oneill-art-db
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - mountPath: /var/lib/mysql
+          name: oneill-art-db-data-0
+      volumes:
+      - name: oneill-art-db-data-0
+        persistentVolumeClaim:
+          claimName: oneill-art-db-data-0

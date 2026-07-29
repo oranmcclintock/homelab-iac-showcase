@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nextcloud
+  name: nextcloud
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nextcloud
+  template:
+    metadata:
+      labels:
+        app: nextcloud
+    spec:
+      containers:
+      - env:
+        - name: MYSQL_HOST
+          value: nextcloud-db
+        - name: MYSQL_DATABASE
+          value: nextcloud
+        - name: MYSQL_USER
+          value: nextcloud_user
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: NEXTCLOUD_DB_PASSWORD
+              name: homelab-secrets
+        - name: NEXTCLOUD_TRUSTED_DOMAINS
+          value: nextcloud.example.com 192.168.x.x 100.x.x.x
+        - name: OVERWRITEPROTOCOL
+          value: https
+        - name: TRUSTED_PROXIES
+          value: host.docker.internal 172.17.0.1 172.16.0.0/12
+        image: nextcloud:latest
+        name: nextcloud
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - mountPath: /var/www/html/data
+          name: nextcloud-data-0
+        - mountPath: /var/www/html/config
+          name: nextcloud-data-1
+        - mountPath: /var/www/html/custom_apps
+          name: nextcloud-data-2
+        - mountPath: /mnt/finance-import
+          name: nextcloud-data-3
+      volumes:
+      - name: nextcloud-data-0
+        persistentVolumeClaim:
+          claimName: nextcloud-data-0
+      - name: nextcloud-data-1
+        persistentVolumeClaim:
+          claimName: nextcloud-data-1
+      - name: nextcloud-data-2
+        persistentVolumeClaim:
+          claimName: nextcloud-data-2
+      - name: nextcloud-data-3
+        persistentVolumeClaim:
+          claimName: nextcloud-data-3

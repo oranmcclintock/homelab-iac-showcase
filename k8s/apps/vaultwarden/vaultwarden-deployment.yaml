@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: vaultwarden
+  name: vaultwarden
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vaultwarden
+  template:
+    metadata:
+      labels:
+        app: vaultwarden
+    spec:
+      containers:
+      - env:
+        - name: SIGNUPS_ALLOWED
+          value: 'true'
+        - name: ADMIN_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: VAULTWARDEN_ADMIN_TOKEN
+              name: homelab-secrets
+        - name: DOMAIN
+          value: https://vault.yourdomain.com
+        image: vaultwarden/server:latest
+        name: vaultwarden
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - mountPath: /data
+          name: vaultwarden-data-0
+      volumes:
+      - name: vaultwarden-data-0
+        persistentVolumeClaim:
+          claimName: vaultwarden-data-0

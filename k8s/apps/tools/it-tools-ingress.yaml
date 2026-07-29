@@ -1,0 +1,16 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: it-tools-ingress
+  namespace: default
+spec:
+  entryPoints:
+  - websecure
+  routes:
+  - kind: Rule
+    match: Host(`tools.example.com`)
+    services:
+    - name: it-tools
+      port: 80
+  tls:
+    certResolver: cloudflare

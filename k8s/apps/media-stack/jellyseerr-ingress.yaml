@@ -1,0 +1,16 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: jellyseerr-ingress
+  namespace: default
+spec:
+  entryPoints:
+  - websecure
+  routes:
+  - kind: Rule
+    match: Host(`jellyseerr.example.com`) || Host(`requests.example.com`)
+    services:
+    - name: jellyseerr
+      port: 5055
+  tls:
+    certResolver: cloudflare

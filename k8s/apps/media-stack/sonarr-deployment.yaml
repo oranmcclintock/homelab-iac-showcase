@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: sonarr
+  name: sonarr
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sonarr
+  template:
+    metadata:
+      labels:
+        app: sonarr
+    spec:
+      initContainers:
+      - name: init-directories
+        image: alpine:latest
+        command: ['sh', '-c', 'mkdir -p /data/media/tv /data/torrents && chown -R 1000:1000 /data']
+        volumeMounts:
+        - mountPath: /data
+          name: media-data
+      containers:
+      - env:
+        - name: PUID
+          value: '1000'
+        - name: PGID
+          value: '1000'
+        - name: TZ
+          value: Europe/London
+        image: lscr.io/linuxserver/sonarr:latest
+        name: sonarr
+        ports:
+        - containerPort: 8989
+        volumeMounts:
+        - mountPath: /config
+          name: sonarr-data-0
+        - mountPath: /data
+          name: media-data
+        - mountPath: /downloads
+          name: media-data
+          subPath: torrents
+      volumes:
+      - name: sonarr-data-0
+        persistentVolumeClaim:
+          claimName: sonarr-data-0
+      - name: media-data
+        persistentVolumeClaim:
+          claimName: media-data

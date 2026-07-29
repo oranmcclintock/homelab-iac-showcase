@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nextcloud-db
+  name: nextcloud-db
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nextcloud-db
+  template:
+    metadata:
+      labels:
+        app: nextcloud-db
+    spec:
+      containers:
+      - env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: NEXTCLOUD_MYSQL_ROOT_PASSWORD
+              name: homelab-secrets
+        - name: MYSQL_DATABASE
+          value: nextcloud
+        - name: MYSQL_USER
+          value: nextcloud_user
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: NEXTCLOUD_DB_PASSWORD
+              name: homelab-secrets
+        image: mariadb:latest
+        name: nextcloud-db
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - mountPath: /var/lib/mysql
+          name: nextcloud-db-data-0
+      volumes:
+      - name: nextcloud-db-data-0
+        persistentVolumeClaim:
+          claimName: nextcloud-db-data-0

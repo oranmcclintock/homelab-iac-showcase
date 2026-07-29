@@ -1,0 +1,28 @@
+# Persistent data and backups
+gitops-state-backup.tar.gz
+*.tar.gz
+*.zip
+
+# Ansible and OS cache
+.ansible/
+.DS_Store
+
+# Secret files (Keep encrypted, but ensure you don't push the age key)
+# Add your age key file name here if you have one
+age.key
+.vagrant/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc

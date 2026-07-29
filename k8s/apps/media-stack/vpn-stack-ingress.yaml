@@ -1,0 +1,21 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: vpn-stack-ingress
+  namespace: default
+spec:
+  entryPoints:
+  - websecure
+  routes:
+  - kind: Rule
+    match: Host(`qbit.example.com`) || Host(`qbittorrent.example.com`)
+    services:
+    - name: vpn-stack
+      port: 8090
+  - kind: Rule
+    match: Host(`prowlarr.example.com`)
+    services:
+    - name: vpn-stack
+      port: 9696
+  tls:
+    certResolver: cloudflare

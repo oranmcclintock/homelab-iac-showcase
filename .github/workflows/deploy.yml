@@ -1,0 +1,72 @@
+name: Deploy Homelab GitOps
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+  repository_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install SOPS & age
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y age
+          curl -LO https://github.com/getsops/sops/releases/download/v3.8.1/sops-v3.8.1.linux.amd64
+          sudo mv sops-v3.8.1.linux.amd64 /usr/local/bin/sops
+          sudo chmod +x /usr/local/bin/sops
+
+      - name: Setup Ansible
+        run: |
+          python3 -m pip install --upgrade pip
+          pip3 install ansible cryptography
+          
+      - name: Install Ansible Collections
+        run: ansible-galaxy collection install -r ansible/requirements.yml
+
+      - name: Connect to Tailscale Network
+        uses: tailscale/github-action@v2
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+          args: --accept-routes
+
+      - name: Fix Tailscale MTU for Ansible
+        run: sudo ip link set dev tailscale0 mtu 1024
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+
+
+      - name: Run Ansible Playbook
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+          ANSIBLE_HOST_KEY_CHECKING: "false"
+        run: |
+          # Dynamically generate inventory for Ansible target
+          echo -e "[homelab]\nhomelab-k3s-node ansible_user=${{ secrets.SERVER_USER }}" > ansible/inventory.ini
+          
+          # Deploy applications
+          ansible-playbook -i ansible/inventory.ini ansible/deploy.yml \
+            --extra-vars "ansible_become_pass=${{ secrets.BECOME_PASSWORD }}" \
+            --extra-vars "media_stack_wireguard_private_key=${{ secrets.MEDIA_STACK_WIREGUARD_PRIVATE_KEY }}" \
+            --extra-vars "media_stack_wireguard_addresses=${{ secrets.MEDIA_STACK_WIREGUARD_ADDRESSES }}"
+
+      - name: Run Integration Tests
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+          ANSIBLE_HOST_KEY_CHECKING: "false"
+        run: |
+          chmod +x tests/*.sh
+          ./tests/run_tests.sh homelab-k3s-node ${{ secrets.SERVER_USER }}
+          # Configure automated nightly backups
+          ansible-playbook -i ansible/inventory.ini ansible/backup.yml \
+            --extra-vars "ansible_become_pass=${{ secrets.BECOME_PASSWORD }}"

@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: paperless
+  name: paperless
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: paperless
+  template:
+    metadata:
+      labels:
+        app: paperless
+    spec:
+      containers:
+      - env:
+        - name: PAPERLESS_REDIS
+          value: redis://paperless-redis:6379
+        - name: PAPERLESS_TIME_ZONE
+          value: Europe/London
+        - name: PAPERLESS_OCR_LANGUAGE
+          value: eng
+        - name: PAPERLESS_URL
+          value: "https://paperless.example.com"
+        - name: PAPERLESS_CSRF_TRUSTED_ORIGINS
+          value: "https://paperless.example.com"
+        - name: PAPERLESS_TRUSTED_PROXIES
+          value: 172.16.0.0/12,192.168.x.x/16,127.0.0.1
+        - name: PAPERLESS_ADMIN_USER
+          valueFrom:
+            secretKeyRef:
+              key: PAPERLESS_ADMIN_USER
+              name: homelab-secrets
+        - name: PAPERLESS_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: PAPERLESS_ADMIN_PASSWORD
+              name: homelab-secrets
+        - name: PAPERLESS_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              key: PAPERLESS_SECRET_KEY
+              name: homelab-secrets
+        image: ghcr.io/paperless-ngx/paperless-ngx:latest
+        name: paperless
+        ports:
+        - containerPort: 8000
+        volumeMounts:
+        - mountPath: /usr/src/paperless/data
+          name: paperless-data-0
+        - mountPath: /usr/src/paperless/media
+          name: paperless-data-1
+        - mountPath: /usr/src/paperless/export
+          name: paperless-data-2
+        - mountPath: /usr/src/paperless/consume
+          name: paperless-data-3
+      volumes:
+      - name: paperless-data-0
+        persistentVolumeClaim:
+          claimName: paperless-data-0
+      - name: paperless-data-1
+        persistentVolumeClaim:
+          claimName: paperless-data-1
+      - name: paperless-data-2
+        persistentVolumeClaim:
+          claimName: paperless-data-2
+      - name: paperless-data-3
+        persistentVolumeClaim:
+          claimName: paperless-data-3

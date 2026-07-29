@@ -1,0 +1,57 @@
+name: Disaster Recovery Restore
+
+on:
+  workflow_dispatch:
+    inputs:
+      snapshot_id:
+        description: 'Restic Snapshot ID to restore (default: latest)'
+        required: false
+        default: 'latest'
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup SOPS
+        uses: mdgreenwald/mozilla-sops-action@v1.6.0
+
+      - name: Install Ansible
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ansible
+          ansible-galaxy collection install community.docker
+          ansible-galaxy collection install community.sops
+
+      - name: Connect to Tailscale Network
+        uses: tailscale/github-action@v2
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+          args: --accept-routes
+
+      - name: Fix Tailscale MTU for Ansible
+        run: sudo ip link set dev tailscale0 mtu 1024
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add Server to known_hosts
+        run: |
+          ping -c 3 ${{ secrets.SERVER_HOST }}
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Run Disaster Recovery Restore Playbook
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+          ANSIBLE_HOST_KEY_CHECKING: "false"
+        run: |
+          # Dynamically inject the server host and user from secrets
+          sed -i "/^\[homelab\]/{n;s/.*/${{ secrets.SERVER_HOST }} ansible_user=${{ secrets.SERVER_USER }}/}" ansible/inventory.ini
+          
+          ansible-playbook -i ansible/inventory.ini ansible/restore.yml \
+            --extra-vars "ansible_become_pass=${{ secrets.BECOME_PASSWORD }} snapshot_id=${{ github.event.inputs.snapshot_id || 'latest' }}"

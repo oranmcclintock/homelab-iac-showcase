@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: radarr
+  name: radarr
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: radarr
+  template:
+    metadata:
+      labels:
+        app: radarr
+    spec:
+      initContainers:
+      - name: init-directories
+        image: alpine:latest
+        command: ['sh', '-c', 'mkdir -p /data/media/movies /data/torrents && chown -R 1000:1000 /data']
+        volumeMounts:
+        - mountPath: /data
+          name: media-data
+      containers:
+      - env:
+        - name: PUID
+          value: '1000'
+        - name: PGID
+          value: '1000'
+        - name: TZ
+          value: Europe/London
+        image: lscr.io/linuxserver/radarr:latest
+        name: radarr
+        ports:
+        - containerPort: 7878
+        volumeMounts:
+        - mountPath: /config
+          name: radarr-data-0
+        - mountPath: /data
+          name: media-data
+        - mountPath: /downloads
+          name: media-data
+          subPath: torrents
+      volumes:
+      - name: radarr-data-0
+        persistentVolumeClaim:
+          claimName: radarr-data-0
+      - name: media-data
+        persistentVolumeClaim:
+          claimName: media-data

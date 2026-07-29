@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: stirling-pdf
+  name: stirling-pdf
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: stirling-pdf
+  template:
+    metadata:
+      labels:
+        app: stirling-pdf
+    spec:
+      containers:
+      - env:
+        - name: DOCKER_ENABLE_SECURITY
+          value: 'false'
+        image: frooodle/s-pdf:latest
+        name: stirling-pdf
+        ports:
+        - containerPort: 8080

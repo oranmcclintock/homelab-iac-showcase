@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: gitea
+  name: gitea
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gitea
+  template:
+    metadata:
+      labels:
+        app: gitea
+    spec:
+      containers:
+      - env:
+        - name: USER_UID
+          value: '1000'
+        - name: USER_GID
+          value: '1000'
+        - name: GITEA__database__DB_TYPE
+          value: postgres
+        - name: GITEA__database__HOST
+          value: gitea-db:5432
+        - name: GITEA__database__NAME
+          value: gitea
+        - name: GITEA__database__USER
+          value: gitea
+        - name: GITEA__database__PASSWD
+          valueFrom:
+            secretKeyRef:
+              key: GITEA_DB_PASSWORD
+              name: homelab-secrets
+        image: gitea/gitea:latest
+        name: gitea
+        ports:
+        - containerPort: 22
+        - containerPort: 3000
+        volumeMounts:
+        - mountPath: /data
+          name: gitea-data-0
+        - mountPath: /etc/timezone
+          name: gitea-data-1
+        - mountPath: /etc/localtime
+          name: gitea-data-2
+      volumes:
+      - name: gitea-data-0
+        persistentVolumeClaim:
+          claimName: gitea-data-0
+      - name: gitea-data-1
+        persistentVolumeClaim:
+          claimName: gitea-data-1
+      - name: gitea-data-2
+        persistentVolumeClaim:
+          claimName: gitea-data-2

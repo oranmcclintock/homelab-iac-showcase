@@ -1,0 +1,124 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vpn-stack
+  namespace: default
+  labels:
+    app: vpn-stack
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vpn-stack
+  template:
+    metadata:
+      labels:
+        app: vpn-stack
+    spec:
+      enableServiceLinks: false
+      hostAliases:
+      - ip: "127.0.0.1"
+        hostnames:
+        - "flaresolverr"
+        - "gluetun"
+        - "prowlarr"
+        - "qbittorrent"
+      containers:
+      # 1. Gluetun (VPN)
+      - name: gluetun
+        image: qmcgaw/gluetun:latest
+        securityContext:
+          capabilities:
+            add: ["NET_ADMIN"]
+        env:
+        - name: VPN_SERVICE_PROVIDER
+          value: mullvad
+        - name: VPN_TYPE
+          value: wireguard
+        - name: WIREGUARD_PRIVATE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: homelab-secrets
+              key: MEDIA_STACK_WIREGUARD_PRIVATE_KEY
+        - name: WIREGUARD_ADDRESSES
+          valueFrom:
+            secretKeyRef:
+              name: homelab-secrets
+              key: MEDIA_STACK_WIREGUARD_ADDRESSES
+        - name: SERVER_COUNTRIES
+          value: Netherlands
+        - name: FIREWALL_OUTBOUND_SUBNETS
+          value: 172.16.0.0/12,192.168.x.x/16,100.x.x.x/10
+        ports:
+        - containerPort: 8090
+          name: qbittorrent
+        - containerPort: 9696
+          name: prowlarr
+        volumeMounts:
+        - name: gluetun-data-0
+          mountPath: /gluetun
+        - name: dev-net-tun
+          mountPath: /dev/net/tun
+
+      # 2. qBittorrent
+      - name: qbittorrent
+        image: lscr.io/linuxserver/qbittorrent:latest
+        env:
+        - name: PUID
+          value: '1000'
+        - name: PGID
+          value: '1000'
+        - name: TZ
+          value: Europe/London
+        - name: WEBUI_PORT
+          value: '8090'
+        volumeMounts:
+        - name: qbittorrent-data-0
+          mountPath: /config
+        - name: media-data
+          mountPath: /data
+        - name: media-data
+          mountPath: /downloads
+          subPath: torrents
+
+      # 3. Prowlarr
+      - name: prowlarr
+        image: lscr.io/linuxserver/prowlarr:latest
+        env:
+        - name: PUID
+          value: '1000'
+        - name: PGID
+          value: '1000'
+        - name: TZ
+          value: Europe/London
+        volumeMounts:
+        - name: prowlarr-data-0
+          mountPath: /config
+
+      # 4. Flaresolverr
+      - name: flaresolverr
+        image: ghcr.io/flaresolverr/flaresolverr:latest
+        env:
+        - name: PROMETHEUS_PORT
+          value: '8192'
+        - name: LOG_LEVEL
+          value: info
+        - name: TZ
+          value: Europe/London
+
+      volumes:
+      - name: dev-net-tun
+        hostPath:
+          path: /dev/net/tun
+      - name: gluetun-data-0
+        persistentVolumeClaim:
+          claimName: gluetun-data-0
+      - name: qbittorrent-data-0
+        persistentVolumeClaim:
+          claimName: qbittorrent-data-0
+      - name: media-data
+        persistentVolumeClaim:
+          claimName: media-data
+      - name: prowlarr-data-0
+        persistentVolumeClaim:
+          claimName: prowlarr-data-0

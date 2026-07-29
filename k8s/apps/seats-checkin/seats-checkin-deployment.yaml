@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: seats-checkin
+  name: seats-checkin
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: seats-checkin
+  template:
+    metadata:
+      labels:
+        app: seats-checkin
+    spec:
+      imagePullSecrets:
+      - name: ghcr-pull-secret
+      containers:
+      - env:
+        - name: TZ
+          value: Europe/London
+        image: ghcr.io/oranmcclintock/seats-automation-python:latest
+        imagePullPolicy: IfNotPresent
+        name: seats-checkin
+        ports:
+        - containerPort: 8085
+        volumeMounts:
+        - mountPath: /app/data
+          name: seats-checkin-data
+        - mountPath: /app/request-logs
+          name: seats-checkin-logs
+      volumes:
+      - name: seats-checkin-data
+        persistentVolumeClaim:
+          claimName: seats-checkin-data
+      - name: seats-checkin-logs
+        persistentVolumeClaim:
+          claimName: seats-checkin-logs

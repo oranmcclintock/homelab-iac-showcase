@@ -1,0 +1,16 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: glances-ingress
+  namespace: default
+spec:
+  entryPoints:
+  - websecure
+  routes:
+  - kind: Rule
+    match: Host(`glances.example.com`)
+    services:
+    - name: glances
+      port: 61208
+  tls:
+    certResolver: cloudflare

@@ -1,0 +1,6 @@
+---
+- name: Install Tailscale
+  ansible.builtin.shell: curl -fsSL https://tailscale.com/install.sh | sh
+  args:
+    creates: /usr/bin/tailscale
+  when: ansible_os_family == "Debian"

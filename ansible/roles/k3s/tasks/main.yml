@@ -1,0 +1,56 @@
+---
+- name: Install K3s
+  ansible.builtin.shell: curl -sfL https://get.k3s.io | sh -
+  args:
+    creates: /usr/local/bin/k3s
+  when: ansible_os_family == "Debian"
+
+- name: Wait for K3s to be ready
+  ansible.builtin.command: k3s kubectl wait --for=condition=Ready nodes --all --timeout=600s
+  changed_when: false
+
+- name: Create ArgoCD namespace
+  ansible.builtin.command: k3s kubectl create namespace argocd
+  register: ns_result
+  failed_when: "ns_result.rc != 0 and 'AlreadyExists' not in ns_result.stderr"
+  changed_when: "ns_result.rc == 0"
+
+- name: Install ArgoCD
+  ansible.builtin.command: k3s kubectl apply --server-side=true --force-conflicts -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+- name: Copy ArgoCD App of Apps Root
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../k8s/argocd/argocd-root.yaml"
+    dest: /tmp/argocd-root.yaml
+    mode: '0644'
+
+- name: Create homelab-secrets Kubernetes Secret
+  ansible.builtin.shell: |
+    k3s kubectl create secret generic homelab-secrets \
+    --from-literal=NEXTCLOUD_DB_PASSWORD="{{ nextcloud_db_password }}" \
+    --from-literal=NEXTCLOUD_MYSQL_ROOT_PASSWORD="{{ nextcloud_mysql_root_password }}" \
+    --from-literal=ADGUARDHOME_ADMIN_PASSWORD="{{ adguardhome_admin_password }}" \
+    --from-literal=IMMICH_DB_PASSWORD="{{ immich_db_password }}" \
+    --from-literal=GITEA_DB_PASSWORD="{{ gitea_db_password }}" \
+    --from-literal=NPM_DB_PASSWORD="{{ npm_db_password }}" \
+    --from-literal=NPM_MYSQL_ROOT_PASSWORD="{{ npm_mysql_root_password }}" \
+    --from-literal=PAPERLESS_DB_PASSWORD="{{ paperless_db_password }}" \
+    --from-literal=PAPERLESS_SECRET_KEY="{{ paperless_secret_key }}" \
+    --from-literal=PAPERLESS_ADMIN_USER="{{ paperless_admin_user }}" \
+    --from-literal=PAPERLESS_ADMIN_PASSWORD="{{ paperless_admin_password }}" \
+    --from-literal=VAULTWARDEN_ADMIN_TOKEN="{{ vaultwarden_admin_token }}" \
+    --from-literal=GRAFANA_ADMIN_PASSWORD="{{ grafana_admin_password }}" \
+    --from-literal=POCKETID_ENCRYPTION_KEY="{{ pocketid_encryption_key }}" \
+    --from-literal=RESTIC_PASSWORD="{{ restic_password }}" \
+    --from-literal=RESTIC_AWS_ACCESS_KEY_ID="{{ restic_aws_access_key_id }}" \
+    --from-literal=RESTIC_AWS_SECRET_ACCESS_KEY="{{ restic_aws_secret_access_key }}" \
+    --from-literal=RESTIC_S3_REPO="{{ restic_s3_repo }}" \
+    --from-literal=MEDIA_STACK_WIREGUARD_PRIVATE_KEY="{{ media_stack_wireguard_private_key }}" \
+    --from-literal=MEDIA_STACK_WIREGUARD_ADDRESSES="{{ media_stack_wireguard_addresses }}" \
+    --from-literal=CLOUDFLARE_API_TOKEN="{{ cloudflare_api_token }}" \
+    --dry-run=client -o yaml | k3s kubectl apply -f -
+  no_log: true
+
+- name: Apply ArgoCD App of Apps Root
+  ansible.builtin.command: k3s kubectl apply -f /tmp/argocd-root.yaml
+  ignore_errors: true

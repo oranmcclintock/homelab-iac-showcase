@@ -1,0 +1,131 @@
+- name: K3s GitOps Homelab Deployment
+  hosts: homelab_k8s
+  become: true
+  gather_facts: false
+  vars:
+    ansible_os_family: "Debian"
+    k3s_version: "v1.30.0+k3s1"
+
+  tasks:
+    - name: Install Tailscale
+      ansible.builtin.shell: curl -fsSL https://tailscale.com/install.sh | sh
+      args:
+        creates: /usr/bin/tailscale
+      when: ansible_os_family == "Debian"
+
+    - name: Enable unattended-upgrades for security patches
+      ansible.builtin.debconf:
+        name: unattended-upgrades
+        question: unattended-upgrades/enable_auto_updates
+        vtype: boolean
+        value: "true"
+      when: ansible_os_family == "Debian"
+
+    - name: Ensure baseline dependencies are installed
+      ansible.builtin.apt:
+        name: 
+          - ufw
+          - fail2ban
+          - unattended-upgrades
+          - bzip2
+          - curl
+        state: present
+        update_cache: true
+      when: ansible_os_family == "Debian"
+
+    - name: Configure UFW firewall
+      community.general.ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop:
+        - "22"
+        - "80"
+        - "443"
+        - "6443" # K3s API
+      when: ansible_os_family == "Debian"
+
+    - name: Enable UFW firewall with default deny
+      community.general.ufw:
+        state: enabled
+        default: deny
+      when: ansible_os_family == "Debian"
+
+    - name: Ensure fail2ban is running and enabled
+      ansible.builtin.systemd:
+        name: fail2ban
+        state: started
+        enabled: yes
+      when: ansible_os_family == "Debian"
+
+    - name: Disable systemd-resolved to free up port 53 for AdGuardHome in K3s
+      ansible.builtin.systemd:
+        name: systemd-resolved
+        state: stopped
+        enabled: no
+      failed_when: false
+      when: ansible_os_family == "Debian"
+
+    - name: Create static resolv.conf pointing to external DNS
+      ansible.builtin.copy:
+        dest: /etc/resolv.conf
+        content: |
+          nameserver 1.1.1.1
+          nameserver 8.8.8.8
+        mode: '0644'
+        force: yes
+        follow: no
+      when: ansible_os_family == "Debian"
+
+    - name: Install K3s (Lightweight Kubernetes)
+      ansible.builtin.shell: |
+        curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version }}" sh -s - server \
+          --disable servicelb \
+          --write-kubeconfig-mode 644
+      args:
+        creates: /usr/local/bin/k3s
+      when: ansible_os_family == "Debian"
+
+    - name: Wait for K3s to become ready
+      ansible.builtin.command: kubectl get nodes
+      register: k3s_status
+      until: k3s_status.rc == 0
+      retries: 30
+      delay: 5
+
+    - name: Create ArgoCD namespace
+      ansible.builtin.command: kubectl create namespace argocd
+      register: argocd_ns
+      failed_when: 
+        - argocd_ns.rc != 0
+        - "'AlreadyExists' not in argocd_ns.stderr"
+
+    - name: Install ArgoCD
+      ansible.builtin.command: kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+    - name: Create ArgoCD Root Application Manifest
+      ansible.builtin.copy:
+        dest: /tmp/argocd-root-app.yaml
+        content: |
+          apiVersion: argoproj.io/v1alpha1
+          kind: Application
+          metadata:
+            name: root-app
+            namespace: argocd
+          spec:
+            project: default
+            source:
+              repoURL: 'https://github.com/oranmcclintock/homelab-monorepo.git'
+              targetRevision: HEAD
+              path: kubernetes/apps
+            destination:
+              server: 'https://kubernetes.default.svc'
+              namespace: default
+            syncPolicy:
+              automated:
+                prune: true
+                selfHeal: true
+
+    - name: Deploy ArgoCD Root Application
+      ansible.builtin.command: kubectl apply -f /tmp/argocd-root-app.yaml
+

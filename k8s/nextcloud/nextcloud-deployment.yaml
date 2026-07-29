@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    kompose.cmd: ./kompose convert -f compose/nextcloud/docker-compose.yml -o k8s/nextcloud/
+    kompose.version: 1.32.0 (765fde254)
+    traefik.docker.network: proxy
+    traefik.enable: "true"
+    traefik.http.routers.nextcloud.entrypoints: websecure
+    traefik.http.routers.nextcloud.rule: Host(`nextcloud.example.com`)
+    traefik.http.routers.nextcloud.tls.certresolver: cloudflare
+    traefik.http.services.nextcloud.loadbalancer.server.port: "80"
+  labels:
+    io.kompose.service: nextcloud
+  name: nextcloud
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      io.kompose.service: nextcloud
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+        kompose.cmd: ./kompose convert -f compose/nextcloud/docker-compose.yml -o k8s/nextcloud/
+        kompose.version: 1.32.0 (765fde254)
+        traefik.docker.network: proxy
+        traefik.enable: "true"
+        traefik.http.routers.nextcloud.entrypoints: websecure
+        traefik.http.routers.nextcloud.rule: Host(`nextcloud.example.com`)
+        traefik.http.routers.nextcloud.tls.certresolver: cloudflare
+        traefik.http.services.nextcloud.loadbalancer.server.port: "80"
+      labels:
+        io.kompose.network/nextcloud-default: "true"
+        io.kompose.network/proxy: "true"
+        io.kompose.service: nextcloud
+    spec:
+      containers:
+        - env:
+            - name: MYSQL_DATABASE
+              value: nextcloud
+            - name: MYSQL_HOST
+              value: db
+            - name: MYSQL_PASSWORD
+            - name: MYSQL_USER
+              value: nextcloud_user
+            - name: NEXTCLOUD_TRUSTED_DOMAINS
+              value: nextcloud.example.com 192.168.x.x 100.x.x.x
+            - name: OVERWRITEPROTOCOL
+              value: https
+            - name: TRUSTED_PROXIES
+              value: host.docker.internal 172.17.0.1 172.16.0.0/12
+          image: nextcloud:latest
+          name: nextcloud
+          volumeMounts:
+            - mountPath: /var/www/html/data
+              name: nextcloud-claim0
+            - mountPath: /var/www/html/config
+              name: nextcloud-claim1
+            - mountPath: /var/www/html/custom_apps
+              name: nextcloud-claim2
+            - mountPath: /mnt/finance-import
+              name: nextcloud-claim3
+      restartPolicy: Always
+      volumes:
+        - name: nextcloud-claim0
+          persistentVolumeClaim:
+            claimName: nextcloud-claim0
+        - name: nextcloud-claim1
+          persistentVolumeClaim:
+            claimName: nextcloud-claim1
+        - name: nextcloud-claim2
+          persistentVolumeClaim:
+            claimName: nextcloud-claim2
+        - name: nextcloud-claim3
+          persistentVolumeClaim:
+            claimName: nextcloud-claim3

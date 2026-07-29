@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: speedtest
+  name: speedtest
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: speedtest
+  template:
+    metadata:
+      labels:
+        app: speedtest
+    spec:
+      containers:
+      - env:
+        - name: PUID
+          value: '1000'
+        - name: PGID
+          value: '1000'
+        - name: TZ
+          value: Europe/London
+        - name: APP_KEY
+          value: base64:RPm8hQSnGbXms2NIvjI5L9T+uLI93NOLKHL/tdFdQuc=
+        image: lscr.io/linuxserver/speedtest-tracker:latest
+        name: speedtest
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - mountPath: /config
+          name: speedtest-data-0
+      volumes:
+      - name: speedtest-data-0
+        persistentVolumeClaim:
+          claimName: speedtest-data-0

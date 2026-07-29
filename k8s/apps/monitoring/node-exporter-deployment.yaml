@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: node-exporter
+  name: node-exporter
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: node-exporter
+  template:
+    metadata:
+      labels:
+        app: node-exporter
+    spec:
+      containers:
+      - env: []
+        image: prom/node-exporter:latest
+        name: node-exporter
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - mountPath: /host/proc
+          name: node-exporter-data-0
+        - mountPath: /host/sys
+          name: node-exporter-data-1
+        - mountPath: /rootfs
+          name: node-exporter-data-2
+      volumes:
+      - name: node-exporter-data-0
+        persistentVolumeClaim:
+          claimName: node-exporter-data-0
+      - name: node-exporter-data-1
+        persistentVolumeClaim:
+          claimName: node-exporter-data-1
+      - name: node-exporter-data-2
+        persistentVolumeClaim:
+          claimName: node-exporter-data-2

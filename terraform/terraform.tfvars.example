@@ -1,0 +1,17 @@
+proxmox_endpoint  = "https://192.168.x.x:8006/"
+proxmox_api_token = "root@pam!terraform=your-uuid-token-here"
+
+vm_id         = 150
+vm_name       = "homelab-docker-node"
+vm_cores      = 8
+vm_memory     = 16384
+vm_disk_size  = 200
+vm_ip_address = "192.168.x.x/24"
+vm_gateway    = "192.168.x.x"
+vm_bridge     = "vmbr0"
+
+ssh_public_key       = "ssh-ed25519 AAAAC3NzaC1... sweeny@workstation"
+sweeny_password_hash = "$6$rounds=4096$..." # Generate using `mkpasswd -m sha-512`
+
+tailscale_authkey = "tskey-auth-..."
+github_pat        = "ghp_..."

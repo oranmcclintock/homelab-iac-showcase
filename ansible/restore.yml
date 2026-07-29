@@ -1,0 +1,66 @@
+---
+- name: Restore homelab data from Restic
+  hosts: all
+  become: yes
+  vars_files:
+    - group_vars/all/secrets.sops.yml
+
+  tasks:
+    - name: Find all Docker Compose directories
+      ansible.builtin.find:
+        paths: "{{ target_root | default('/opt/appdata') }}/gitops-compose"
+        file_type: directory
+        recurse: yes
+        patterns: "docker-compose.yml"
+      register: compose_files
+
+    - name: Stop all Docker containers using compose to prevent DB corruption during restore
+      ansible.builtin.shell: |
+        cd "$(dirname "{{ item.path }}")" && docker compose stop || true
+      loop: "{{ compose_files.files | default([]) }}"
+      when: compose_files.matched > 0
+
+    - name: Stop any lingering Docker containers
+      ansible.builtin.shell: |
+        RUNNING=$(docker ps -q)
+        if [ -n "$RUNNING" ]; then docker stop $RUNNING || true; fi
+
+    - name: Create temporary Restic backup env file
+      ansible.builtin.copy:
+        dest: /tmp/.backup.env
+        mode: '0600'
+        owner: root
+        group: root
+        content: |
+          RESTIC_PASSWORD="{{ restic_password }}"
+          AWS_ACCESS_KEY_ID="{{ restic_aws_access_key_id }}"
+          AWS_SECRET_ACCESS_KEY="{{ restic_aws_secret_access_key }}"
+          RESTIC_REPOSITORY="{{ restic_s3_repo }}"
+      no_log: true
+
+    - name: Automatically restore data from Restic
+      ansible.builtin.shell: |
+        source /tmp/.backup.env
+        export RESTIC_PASSWORD AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY RESTIC_REPOSITORY
+        restic restore {{ snapshot_id | default('latest') }} --target /
+      args:
+        executable: /bin/bash
+
+    - name: Remove temporary Restic env file
+      ansible.builtin.file:
+        path: /tmp/.backup.env
+        state: absent
+
+    - name: Find all Docker Compose directories after restore
+      ansible.builtin.find:
+        paths: "{{ target_root | default('/opt/appdata') }}/gitops-compose"
+        file_type: directory
+        recurse: yes
+        patterns: "docker-compose.yml"
+      register: post_restore_compose_files
+
+    - name: Start all Docker containers using compose to gracefully handle dependencies
+      ansible.builtin.shell: |
+        cd "$(dirname "{{ item.path }}")" && docker compose start || true
+      loop: "{{ post_restore_compose_files.files | default([]) }}"
+      when: post_restore_compose_files.matched > 0

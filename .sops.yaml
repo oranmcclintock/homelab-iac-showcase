@@ -1,0 +1,9 @@
+creation_rules:
+  - path_regex: ansible/group_vars/all/secrets.sops.yml$
+    key_groups:
+    - age:
+      - age1uwwvt34sn5krnvmy8t9zrskvhzvmys6w2w5verwvxqfqcm3t8pxqta6vws
+  - path_regex: terraform/terraform.sops.tfvars$
+    key_groups:
+    - age:
+      - age1uwwvt34sn5krnvmy8t9zrskvhzvmys6w2w5verwvxqfqcm3t8pxqta6vws

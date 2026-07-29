@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: glances
+  name: glances
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: glances
+  template:
+    metadata:
+      labels:
+        app: glances
+    spec:
+      containers:
+      - env:
+        - name: GLANCES_OPT
+          value: -w
+        - name: TZ
+          value: Europe/London
+        image: nicolargo/glances:latest
+        name: glances
+        ports:
+        - containerPort: 61208
+        volumeMounts:
+        - mountPath: /var/run/docker.sock
+          name: glances-data-0
+        - mountPath: /etc/os-release
+          name: glances-data-1
+      volumes:
+      - name: glances-data-0
+        hostPath:
+          path: /var/run/docker.sock
+      - name: glances-data-1
+        hostPath:
+          path: /etc/os-release

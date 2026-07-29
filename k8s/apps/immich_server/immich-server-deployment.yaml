@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: immich-server
+  name: immich-server
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: immich-server
+  template:
+    metadata:
+      labels:
+        app: immich-server
+    spec:
+      containers:
+      - env:
+        - name: DB_URL
+          value: postgresql://sweeny:REDACTED@database:5432/immich
+        - name: REDIS_HOSTNAME
+          value: redis
+        - name: REDIS_PORT
+          value: "6379"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+        image: ghcr.io/immich-app/immich-server:v1.106.4
+        name: immich-server
+        ports:
+        - containerPort: 2283
+        volumeMounts:
+        - mountPath: /usr/src/app/upload
+          name: immich-server-data-0
+        - mountPath: /etc/localtime
+          name: immich-server-data-1
+      volumes:
+      - name: immich-server-data-0
+        persistentVolumeClaim:
+          claimName: immich-server-data-0
+      - name: immich-server-data-1
+        hostPath:
+          path: /etc/localtime
+          type: File

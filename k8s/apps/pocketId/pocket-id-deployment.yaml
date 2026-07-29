@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: pocket-id
+  name: pocket-id
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pocket-id
+  template:
+    metadata:
+      labels:
+        app: pocket-id
+    spec:
+      containers:
+      - env:
+        - name: APP_URL
+          value: "https://pocketid.example.com"
+        - name: ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              key: POCKETID_ENCRYPTION_KEY
+              name: homelab-secrets
+        - name: TRUST_PROXY
+          value: "true"
+        image: ghcr.io/pocket-id/pocket-id:latest
+        name: pocket-id
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - mountPath: /app/data
+          name: pocket-id-data-0
+      volumes:
+      - name: pocket-id-data-0
+        persistentVolumeClaim:
+          claimName: pocket-id-data-0

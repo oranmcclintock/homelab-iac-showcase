@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: recyclarr
+  name: recyclarr
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: recyclarr
+  template:
+    metadata:
+      labels:
+        app: recyclarr
+    spec:
+      containers:
+      - env:
+        - name: TZ
+          value: Europe/London
+        image: ghcr.io/recyclarr/recyclarr:latest
+        name: recyclarr
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - mountPath: /config
+          name: recyclarr-data-0
+      volumes:
+      - name: recyclarr-data-0
+        persistentVolumeClaim:
+          claimName: recyclarr-data-0

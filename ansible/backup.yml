@@ -1,0 +1,119 @@
+---
+- name: Configure Nightly Restic Backups
+  hosts: homelab
+  become: yes
+
+  tasks:
+    - name: Install restic
+      ansible.builtin.apt:
+        name: restic
+        state: present
+        update_cache: yes
+      when: ansible_os_family == "Debian"
+
+    - name: Ensure backup scripts directory exists
+      ansible.builtin.file:
+        path: /opt/scripts
+        state: directory
+        mode: '0755'
+
+    - name: Create Restic backup env file
+      ansible.builtin.copy:
+        dest: /opt/scripts/.backup.env
+        mode: '0600'
+        owner: root
+        group: root
+        content: |
+          RESTIC_PASSWORD="{{ restic_password }}"
+          AWS_ACCESS_KEY_ID="{{ restic_aws_access_key_id }}"
+          AWS_SECRET_ACCESS_KEY="{{ restic_aws_secret_access_key }}"
+
+    - name: Find all compose stacks
+      ansible.builtin.find:
+        paths: "{{ playbook_dir }}/../compose"
+        file_type: directory
+      register: compose_stacks
+      delegate_to: localhost
+
+    - name: Create Restic backup script
+      ansible.builtin.copy:
+        dest: /opt/scripts/backup.sh
+        mode: '0700'
+        owner: root
+        group: root
+        content: |
+          #!/bin/bash
+          source /opt/scripts/.backup.env
+          export RESTIC_PASSWORD
+          export AWS_ACCESS_KEY_ID
+          export AWS_SECRET_ACCESS_KEY
+          export RESTIC_REPOSITORY="{{ restic_s3_repo }}"
+          
+          # Initialize repo if it doesn't exist
+          restic snapshots || restic init
+          
+          echo "Dumping databases before backup..."
+          mkdir -p /opt/backup/db_dumps
+          
+          # Nextcloud MariaDB
+          if kubectl get deploy nextcloud-db >/dev/null 2>&1; then
+            kubectl exec deploy/nextcloud-db -- sh -c 'exec mariadb-dump --all-databases -u root -p"$MYSQL_ROOT_PASSWORD"' > /opt/backup/db_dumps/nextcloud.sql || true
+          fi
+          
+          # Immich PostgreSQL
+          if kubectl get deploy database >/dev/null 2>&1; then
+            kubectl exec deploy/database -- sh -c 'exec pg_dumpall -U "$POSTGRES_USER"' > /opt/backup/db_dumps/immich.sql || true
+          fi
+          
+          # Gitea PostgreSQL
+          if kubectl get deploy gitea-db >/dev/null 2>&1; then
+            kubectl exec deploy/gitea-db -- sh -c 'exec pg_dumpall -U "$POSTGRES_USER"' > /opt/backup/db_dumps/gitea.sql || true
+          fi
+          
+          # O'Neill Art MariaDB
+          if kubectl get deploy oneill-art-db >/dev/null 2>&1; then
+            kubectl exec deploy/oneill-art-db -- sh -c 'exec mariadb-dump --all-databases -u root -p"$MYSQL_ROOT_PASSWORD"' > /opt/backup/db_dumps/oneill_art.sql || true
+          fi
+
+          echo "Freezing all containers..."
+          CONTAINERS=$(docker ps -q)
+          if [ -n "$CONTAINERS" ]; then
+            docker pause $CONTAINERS
+          fi
+
+          # Whitelisted directories to backup
+          BACKUP_DIRS=(
+            "{{ target_root | default('/opt/appdata') }}/gitops-compose"
+            "/var/lib/tailscale"
+            "/opt/backup/db_dumps"
+          {% for stack in compose_stacks.files %}
+            "{{ target_root | default('/opt/appdata') }}/{{ stack.path | basename }}"
+          {% endfor %}
+          )
+          
+          # Backup whitelisted directories, explicitly excluding massive media within them
+          restic backup "${BACKUP_DIRS[@]}" \
+            --exclude "{{ target_root | default('/opt/appdata') }}/immich_server/library" \
+            --exclude "{{ target_root | default('/opt/appdata') }}/nextcloud/data" \
+            --exclude "{{ target_root | default('/opt/appdata') }}/media-stack/data" \
+            --exclude "{{ target_root | default('/opt/appdata') }}/nextcloud/db_data" \
+            --exclude "{{ target_root | default('/opt/appdata') }}/immich_server/postgres" \
+            --exclude "{{ target_root | default('/opt/appdata') }}/gitea/db" \
+            --exclude "{{ target_root | default('/opt/appdata') }}/oneill_art/db" \
+            --exclude "/var/lib/rancher/k3s/storage/*-db-*" \
+            --exclude "/var/lib/rancher/k3s/storage/*-database-*"
+            
+          # Unfreeze all containers
+          if [ -n "$CONTAINERS" ]; then
+            docker unpause $CONTAINERS
+          fi
+          
+          # Keep last 7 daily, 4 weekly, 6 monthly backups
+          restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune
+
+    - name: Schedule nightly backup via cron
+      ansible.builtin.cron:
+        name: "Nightly Restic Backup"
+        minute: "0"
+        hour: "2"
+        job: "/opt/scripts/backup.sh >> /var/log/restic_backup.log 2>&1"

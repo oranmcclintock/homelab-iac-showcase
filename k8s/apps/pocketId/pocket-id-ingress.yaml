@@ -1,0 +1,16 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: pocket-id-ingress
+  namespace: default
+spec:
+  entryPoints:
+  - websecure
+  routes:
+  - kind: Rule
+    match: Host(`pocketid.example.com`)
+    services:
+    - name: pocket-id
+      port: 80
+  tls:
+    certResolver: cloudflare

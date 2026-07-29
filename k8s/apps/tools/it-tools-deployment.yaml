@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: it-tools
+  name: it-tools
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: it-tools
+  template:
+    metadata:
+      labels:
+        app: it-tools
+    spec:
+      containers:
+      - env: []
+        image: corentinth/it-tools:latest
+        name: it-tools
+        ports:
+        - containerPort: 80

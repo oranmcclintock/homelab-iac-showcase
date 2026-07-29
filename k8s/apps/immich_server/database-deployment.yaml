@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: database
+  name: database
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: database
+  template:
+    metadata:
+      labels:
+        app: database
+    spec:
+      containers:
+      - env:
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: IMMICH_DB_PASSWORD
+              name: homelab-secrets
+        - name: POSTGRES_USER
+          value: postgres
+        - name: POSTGRES_DB
+          value: postgres
+        image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0
+        name: database
+        ports:
+        - containerPort: 3306
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: database-data-0
+      volumes:
+      - name: database-data-0
+        persistentVolumeClaim:
+          claimName: database-data-0
