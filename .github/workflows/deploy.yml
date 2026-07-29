@@ -1,9 +1,6 @@
 name: Deploy Homelab GitOps
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
   repository_dispatch:
 
