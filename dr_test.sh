@@ -1,61 +1,56 @@
 #!/bin/bash
 
 # ======================================================================
-# GITOPS DISASTER RECOVERY TEST
+# GITOPS DISASTER RECOVERY VALIDATION SCRIPT
 # ======================================================================
-# This script completely destroys the local sandbox, spins up a fresh
-# Ubuntu VM, restores the stateful backup from Cloudflare R2, deploys
-# the GitOps infrastructure, and independently runs a QA health check.
+# This script performs a non-destructive health audit of the Proxmox/K3s
+# GitOps infrastructure to validate that a disaster recovery restore
+# was successful.
 # ======================================================================
 
 set -e
 
-echo "[DR TEST] Phase 1: Checking for base snapshot..."
-if ! vagrant snapshot list | grep -q "clean-base"; then
-    echo "Base VM snapshot not found. Building fresh Ubuntu VM..."
-    vagrant destroy -f
-    vagrant up
-    vagrant snapshot save clean-base
+echo "[DR TEST] Phase 1: Checking K3s Node Health..."
+if ! sudo k3s kubectl get nodes | grep -q "Ready"; then
+    echo "[FAIL] No nodes are in the Ready state."
+    exit 1
 fi
+echo "[PASS] K3s Node is Ready."
 
-echo "[DR TEST] Phase 2: Restoring clean base & running Ansible..."
-vagrant snapshot restore clean-base
-vagrant provision --provision-with ansible
+echo "[DR TEST] Phase 2: QA Pod Health Audit..."
+# Check for any pods that are not Running or Completed
+PODS_DOWN=$(sudo k3s kubectl get pods -A --field-selector=status.phase!=Running | grep -v "Completed" | grep -v "NAMESPACE" | wc -l | tr -d ' ')
 
-echo "[DR TEST] Phase 3: QA Container Health Audit..."
-CONTAINERS_DOWN=$(vagrant ssh -c "sudo docker ps -q -f status=exited -f status=restarting -f status=dead | wc -l" 2>/dev/null | tr -d '\r')
-
-if [ "$CONTAINERS_DOWN" -gt 0 ]; then
-    echo "[FAIL] QA FAILED: $CONTAINERS_DOWN container(s) are crashing or dead!"
-    vagrant ssh -c "sudo docker ps -a | grep -v 'Up '"
+if [ "$PODS_DOWN" -gt 0 ]; then
+    echo "[FAIL] QA FAILED: $PODS_DOWN pod(s) are crashing or not in Running state!"
+    sudo k3s kubectl get pods -A --field-selector=status.phase!=Running | grep -v "Completed"
     exit 1
 else
-    echo "[PASS] QA PASSED: All containers are healthy and running."
+    echo "[PASS] QA PASSED: All K3s pods are healthy."
 fi
 
-echo "[DR TEST] Phase 4: Nginx Proxy Manager Routing Audit..."
+echo "[DR TEST] Phase 3: Traefik Ingress Routing Audit..."
 
-# We will spoof the Host headers to test the reverse proxy routing inside the VM
+# Spoof Host headers to test Traefik routing directly via localhost port 80
 DOMAINS=("paperless.example.com" "nextcloud.example.com" "gitea.example.com" "vaultwarden.example.com")
 
 for DOMAIN in "${DOMAINS[@]}"; do
-    # Fetch the HTTP status code from NPM port 8080
-    HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}\n" -H "Host: $DOMAIN" http://localhost:8080)
+    # Fetch the HTTP status code from Traefik on port 80
+    HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}\n" -H "Host: $DOMAIN" http://localhost:80)
     
-    # Acceptable codes: 200 (OK), 301/302 (Redirect to login/HTTPS), 401 (Unauthorized/Auth required)
+    # Acceptable codes: 200 (OK), 301/302 (Redirect to login/HTTPS), 401 (Unauthorized/Auth required), 404 (In some cases ok, but mostly 302s and 200s)
     if [[ "$HTTP_STATUS" =~ ^(200|301|302|401)$ ]]; then
         echo "[PASS] ROUTING PASSED: $DOMAIN -> HTTP $HTTP_STATUS"
     else
-        echo "[FAIL] ROUTING FAILED: $DOMAIN -> HTTP $HTTP_STATUS (NPM failed to route to backend)"
+        echo "[FAIL] ROUTING FAILED: $DOMAIN -> HTTP $HTTP_STATUS (Traefik failed to route to backend)"
         exit 1
     fi
 done
 
 echo ""
 echo "======================================================================"
-echo "DISASTER RECOVERY TEST 100% SUCCESSFUL"
+echo "DISASTER RECOVERY AUDIT 100% SUCCESSFUL"
 echo "======================================================================"
-echo "The restore playbook accurately unpacked the backup from Cloudflare R2."
-echo "The deploy playbook securely injected secrets & built the stacks."
-echo "All containers are healthy and NPM is accurately routing traffic."
-echo "The physical server is officially cleared for maintenance."
+echo "All K3s nodes and pods are healthy."
+echo "Traefik is accurately routing traffic for internal services."
+echo "The infrastructure has successfully survived the DR test!"

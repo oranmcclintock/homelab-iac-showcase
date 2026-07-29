@@ -36,13 +36,18 @@ Because the Cloudflare R2 backup explicitly excludes massive media directories v
    ```
 3. Restart the media containers to register the newly mounted files:
    ```bash
-   sudo docker restart immich_server nextcloud qbittorrent radarr sonarr jellyfin
+   sudo k3s kubectl rollout restart deployment/immich-server -n default
+   sudo k3s kubectl rollout restart deployment/nextcloud -n default
+   sudo k3s kubectl rollout restart deployment/qbittorrent -n default
+   sudo k3s kubectl rollout restart deployment/radarr -n default
+   sudo k3s kubectl rollout restart deployment/sonarr -n default
+   sudo k3s kubectl rollout restart deployment/jellyfin -n default
    ```
 
 ## 5. Verification
 Verify the system is fully operational by executing the internal QA check (or running it locally against the live IP):
 ```bash
-# Verify Nginx Proxy Manager routing
-curl -H "Host: vaultwarden.example.com" http://<parkanore-ip>:8080
+# Verify Traefik routing
+curl -H "Host: vaultwarden.example.com" http://<parkanore-ip>:80
 ```
 Expect an HTTP `200 OK` or `302 Found`. Recovery is complete.
