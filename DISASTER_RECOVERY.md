@@ -1,6 +1,5 @@
 # Parkanore Disaster Recovery Guide
 
-> **Target Audience:** Systems Technician / Administrator
 > **Architecture:** GitOps (Ansible) + SOPS (Age) + Cloud Object Storage (Cloudflare R2)
 
 This document outlines the exact procedure to recover the `parkanore` bare-metal node or hypervisor VM in the event of a catastrophic hardware failure or migration.
